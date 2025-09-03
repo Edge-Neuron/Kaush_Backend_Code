@@ -99,7 +99,7 @@ const userSchema = new mongoose.Schema({
 const User = mongoose.model('User', userSchema);
 
 // Email setup
-const transporter = nodemailer.createTransporter({
+const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST || 'smtp-relay.brevo.com',
   port: process.env.EMAIL_PORT || 587,
   secure: false,
