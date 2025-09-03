@@ -1,12 +1,12 @@
-// server.js - JUCE Backend with Mailgun Integration
+// server.js - JUCE Backend with Mailgun API Integration
 const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const nodemailer = require('nodemailer');
 const crypto = require('crypto');
-const mailgun = require('mailgun-js');
+const formData = require('form-data');
+const Mailgun = require('mailgun.js');
 require('dotenv').config();
 
 const app = express();
@@ -40,20 +40,12 @@ const userSchema = new mongoose.Schema({
 });
 const User = mongoose.model('User', userSchema);
 
-// Mailgun Config
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST || 'smtp.mailgun.org',
-  port: parseInt(process.env.EMAIL_PORT) || 587,
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
+// Mailgun Config (API only)
+const mailgun = new Mailgun(formData);
+const mg = mailgun.client({
+  username: 'api',
+  key: process.env.MAILGUN_API_KEY
 });
-let mg = null;
-if (process.env.MAILGUN_API_KEY && process.env.MAILGUN_DOMAIN) {
-  mg = mailgun({ apiKey: process.env.MAILGUN_API_KEY, domain: process.env.MAILGUN_DOMAIN });
-}
 
 // --- Helper functions ---
 const generateToken = (userId) =>
@@ -71,48 +63,43 @@ const authenticateToken = (req, res, next) => {
 
 const sendVerificationEmail = async (email, verificationToken) => {
   const url = `${process.env.BASE_URL}/api/auth/verify/${verificationToken}`;
-
-  const mailOptions = {
-    from: process.env.EMAIL_USER,
-    to: email,
-    subject: 'Verify your JUCE App account',
-    text: `Please verify your account by visiting ${url}`,
-    html: `<p>Please verify your account by clicking <a href="${url}">here</a></p>`
-  };
-
   try {
-    console.log("📨 [DEBUG] Trying SMTP to:", email);
-    console.log("📨 [DEBUG] SMTP User:", process.env.EMAIL_USER);
+    console.log("📨 [DEBUG] Sending verification email via Mailgun API to:", email);
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log("✅ [SMTP SUCCESS] Message sent:", info);
+    const body = await mg.messages.create(process.env.MAILGUN_DOMAIN, {
+      from: `JUCE App <mailgun@${process.env.MAILGUN_DOMAIN}>`,
+      to: [email],
+      subject: 'Verify your JUCE App account',
+      text: `Please verify your account by visiting ${url}`,
+      html: `<p>Please verify your account by clicking <a href="${url}">here</a></p>`
+    });
 
-    return { success: true, method: 'SMTP', id: info.messageId };
-  } catch (err) {
-    console.error("❌ [SMTP ERROR]:", err.message);
+    console.log("✅ [API SUCCESS] Mailgun API response:", body);
+    return { success: true, method: 'API', id: body.id };
+  } catch (e) {
+    console.error("❌ [API ERROR]:", e.message);
+    return { success: false, error: e.message, method: 'API' };
+  }
+};
 
-    if (!mg) {
-      return { success: false, error: err.message, method: 'SMTP' };
-    }
+const sendPasswordResetEmail = async (email, token) => {
+  const resetUrl = `${process.env.BASE_URL}/api/auth/reset-password/${token}`;
+  try {
+    console.log("📨 [DEBUG] Sending password reset email via Mailgun API to:", email);
 
-    try {
-      console.log("📨 [DEBUG] Falling back to Mailgun API for:", email);
+    const body = await mg.messages.create(process.env.MAILGUN_DOMAIN, {
+      from: `JUCE App <mailgun@${process.env.MAILGUN_DOMAIN}>`,
+      to: [email],
+      subject: 'Reset your JUCE App password',
+      text: `Reset your password here: ${resetUrl}`,
+      html: `<p>Click <a href="${resetUrl}">here</a> to reset your password.</p>`
+    });
 
-      const body = await mg.messages.create(process.env.MAILGUN_DOMAIN, {
-        from: `JUCE App <mailgun@${process.env.MAILGUN_DOMAIN}>`,
-        to: [email],
-        subject: 'Verify your JUCE App account',
-        text: `Please verify your account by visiting ${url}`,
-        html: `<p>Please verify your account by clicking <a href="${url}">here</a></p>`
-      });
-
-      console.log("✅ [API SUCCESS] Mailgun API response:", body);
-
-      return { success: true, method: 'API', id: body.id };
-    } catch (e) {
-      console.error("❌ [API ERROR]:", e.message);
-      return { success: false, error: e.message, method: 'API' };
-    }
+    console.log("✅ [API SUCCESS] Password reset email sent:", body);
+    return { success: true, method: 'API', id: body.id };
+  } catch (e) {
+    console.error("❌ [API ERROR]:", e.message);
+    return { success: false, error: e.message, method: 'API' };
   }
 };
 
@@ -146,23 +133,16 @@ app.post('/api/auth/register', async (req, res) => {
     // ✅ Respond immediately
     res.json({ success: true, userId: user._id });
 
-    // 🔄 Send email in background with detailed logs
+    // 🔄 Send email in background
     console.log("📧 [DEBUG] Preparing to send verification email...");
-    sendVerificationEmail(email, verificationToken, username)
-      .then(result => {
-        console.log("📧 [SUCCESS] Verification email result:", result);
-      })
-      .catch(err => {
-        console.error("❌ [ERROR] Verification email failed:", err);
-      });
-
+    sendVerificationEmail(email, verificationToken)
+      .then(result => console.log("📧 [RESULT] Verification email:", result))
+      .catch(err => console.error("❌ [ERROR] Verification email failed:", err));
   } catch (err) {
     console.error("❌ Register error:", err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
-
-
 
 // Login
 app.post('/api/auth/login', async (req, res) => {
@@ -212,14 +192,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     user.resetPasswordExpires = Date.now() + 3600000; // 1 hr
     await user.save();
 
-    const resetUrl = `${process.env.BASE_URL}/api/auth/reset-password/${token}`;
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject: 'Reset your JUCE App password',
-      text: `Reset your password here: ${resetUrl}`
-    });
-
+    await sendPasswordResetEmail(email, token);
     res.json({ success: true, message: 'Password reset email sent' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
