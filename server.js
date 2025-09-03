@@ -110,7 +110,7 @@ const emailConfig = {
   port: 587,
   secure: false,
   auth: {
-    user: '9628b7001@smtp-brevo.com',
+    user: '9628b7002@smtp-brevo.com',
     pass: 'BrevoSMTPKey-xsmtpsib-a3b48f04e0b9926ee36f9668131698393f51525bfa5cdf5adc789be3af992601-9L5zPSxDUTZJbhG3'
   },
   tls: {
