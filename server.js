@@ -71,6 +71,7 @@ const authenticateToken = (req, res, next) => {
 
 const sendVerificationEmail = async (email, verificationToken) => {
   const url = `${process.env.BASE_URL}/api/auth/verify/${verificationToken}`;
+
   const mailOptions = {
     from: process.env.EMAIL_USER,
     to: email,
@@ -80,19 +81,36 @@ const sendVerificationEmail = async (email, verificationToken) => {
   };
 
   try {
+    console.log("📨 [DEBUG] Trying SMTP to:", email);
+    console.log("📨 [DEBUG] SMTP User:", process.env.EMAIL_USER);
+
     const info = await transporter.sendMail(mailOptions);
+    console.log("✅ [SMTP SUCCESS] Message sent:", info);
+
     return { success: true, method: 'SMTP', id: info.messageId };
   } catch (err) {
-    if (!mg) return { success: false, error: err.message, method: 'SMTP' };
+    console.error("❌ [SMTP ERROR]:", err.message);
+
+    if (!mg) {
+      return { success: false, error: err.message, method: 'SMTP' };
+    }
+
     try {
-      const body = await mg.messages().send({
+      console.log("📨 [DEBUG] Falling back to Mailgun API for:", email);
+
+      const body = await mg.messages.create(process.env.MAILGUN_DOMAIN, {
         from: `JUCE App <mailgun@${process.env.MAILGUN_DOMAIN}>`,
-        to: email,
+        to: [email],
         subject: 'Verify your JUCE App account',
-        text: `Please verify your account by visiting ${url}`
+        text: `Please verify your account by visiting ${url}`,
+        html: `<p>Please verify your account by clicking <a href="${url}">here</a></p>`
       });
+
+      console.log("✅ [API SUCCESS] Mailgun API response:", body);
+
       return { success: true, method: 'API', id: body.id };
     } catch (e) {
+      console.error("❌ [API ERROR]:", e.message);
       return { success: false, error: e.message, method: 'API' };
     }
   }
@@ -125,16 +143,17 @@ app.post('/api/auth/register', async (req, res) => {
     const user = new User({ username, email, password: hashed, verificationToken });
     await user.save();
 
-    // ✅ Respond immediately (don’t wait for email)
+    // ✅ Respond immediately
     res.json({ success: true, userId: user._id });
 
-    // 🔄 Send email in background
-    sendVerificationEmail(email, verificationToken)
+    // 🔄 Send email in background with detailed logs
+    console.log("📧 [DEBUG] Preparing to send verification email...");
+    sendVerificationEmail(email, verificationToken, username)
       .then(result => {
-        console.log(`📧 Verification email sent to ${email} [${result.method}]`);
+        console.log("📧 [SUCCESS] Verification email result:", result);
       })
       .catch(err => {
-        console.error(`❌ Failed to send verification email: ${err.message}`);
+        console.error("❌ [ERROR] Verification email failed:", err);
       });
 
   } catch (err) {
@@ -142,6 +161,7 @@ app.post('/api/auth/register', async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
 
 
 // Login
