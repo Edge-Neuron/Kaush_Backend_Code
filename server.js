@@ -125,12 +125,24 @@ app.post('/api/auth/register', async (req, res) => {
     const user = new User({ username, email, password: hashed, verificationToken });
     await user.save();
 
-    const emailResult = await sendVerificationEmail(email, verificationToken);
-    res.json({ success: true, userId: user._id, email: emailResult });
+    // ✅ Respond immediately (don’t wait for email)
+    res.json({ success: true, userId: user._id });
+
+    // 🔄 Send email in background
+    sendVerificationEmail(email, verificationToken)
+      .then(result => {
+        console.log(`📧 Verification email sent to ${email} [${result.method}]`);
+      })
+      .catch(err => {
+        console.error(`❌ Failed to send verification email: ${err.message}`);
+      });
+
   } catch (err) {
+    console.error("❌ Register error:", err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
 
 // Login
 app.post('/api/auth/login', async (req, res) => {
