@@ -67,7 +67,7 @@ const sendVerificationEmail = async (email, token) => {
 
   try {
     const result = await resend.emails.send({
-      from: "onboarding@resend.dev", // ✅ replace with a verified sender in Resend
+      from: "noreply@onboarding-kaush.kalpruh.com", // ✅ replace with a verified sender in Resend
       to: email,
       subject: "Verify your JUCE App account",
       html: `<p>Welcome to Kalpruh! Please verify your email by clicking <a href="${url}">here</a>.</p>`,
