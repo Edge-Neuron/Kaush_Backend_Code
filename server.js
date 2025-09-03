@@ -1,4 +1,4 @@
-// Enhanced server.js with better email debugging and error handling
+// server.js - JUCE Backend Server
 const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
@@ -9,43 +9,10 @@ const crypto = require('crypto');
 require('dotenv').config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT;
 const JWT_SECRET = process.env.JWT_SECRET;
 const MONGODB_URI = process.env.MONGODB_URI;
-
-// Enhanced email configuration for Brevo
-const emailConfig = {
-  host: 'smtp-relay.brevo.com',
-  port: 587,
-  secure: false, // Use STARTTLS
-  auth: {
-    user: process.env.EMAIL_USER, // Your Brevo email
-    pass: process.env.EMAIL_PASS  // Your Brevo SMTP key
-  },
-  tls: {
-    ciphers: 'SSLv3',
-    rejectUnauthorized: false
-  }
-};
-
-// Debug email configuration
-console.log('Email configuration check:');
-console.log('EMAIL_USER:', process.env.EMAIL_USER ? '✓ Set' : '✗ Missing');
-console.log('EMAIL_PASS:', process.env.EMAIL_PASS ? '✓ Set' : '✗ Missing');
-console.log('BASE_URL:', process.env.BASE_URL || 'Not set - using default');
-
-// Create transporter with enhanced error handling
-const transporter = nodemailer.createTransport(emailConfig);
-
-// Verify email connection on startup
-transporter.verify(function(error, success) {
-  if (error) {
-    console.error('❌ Email configuration error:', error);
-    console.log('Email sending will be disabled');
-  } else {
-    console.log('✅ Email server is ready to take our messages');
-  }
-});
+console.log('MONGODB_URI being used:', MONGODB_URI.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@'));
 
 // Middleware
 app.use(cors({
@@ -55,12 +22,12 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Simple rate limiting (keeping your existing implementation)
+// Simple rate limiting
 const requests = new Map();
 app.use((req, res, next) => {
   const ip = req.ip || req.connection.remoteAddress;
   const now = Date.now();
-  const windowMs = 15 * 60 * 1000;
+  const windowMs = 15 * 60 * 1000; // 15 minutes
   const maxRequests = 100;
   
   if (!requests.has(ip)) {
@@ -81,10 +48,10 @@ app.use((req, res, next) => {
 
 // Connect to MongoDB
 mongoose.connect(MONGODB_URI)
-  .then(() => console.log('✅ Connected to MongoDB'))
-  .catch(err => console.error('❌ MongoDB connection error:', err));
+  .then(() => console.log('Connected to MongoDB'))
+  .catch(err => console.error('MongoDB connection error:', err));
 
-// User Schema (keeping your existing schema)
+// User Schema
 const userSchema = new mongoose.Schema({
   username: { 
     type: String, 
@@ -132,111 +99,86 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model('User', userSchema);
 
-// Enhanced email sending function
-const sendVerificationEmail = async (email, verificationToken, username) => {
-  try {
-    const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
-    const verificationUrl = `${baseUrl}/api/auth/verify/${verificationToken}`;
-    
-    console.log(`📧 Attempting to send verification email to: ${email}`);
-    console.log(`🔗 Verification URL: ${verificationUrl}`);
-    
-    const mailOptions = {
-      from: {
-        name: 'JUCE App',
-        address: process.env.EMAIL_USER
-      },
-      to: email,
-      subject: 'Verify your JUCE App account',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <h2 style="color: #333; text-align: center;">Welcome to JUCE App, ${username}!</h2>
-          <p>Thank you for registering with JUCE App. To complete your registration, please verify your email address by clicking the button below:</p>
-          
-          <div style="text-align: center; margin: 30px 0;">
-            <a href="${verificationUrl}" 
-               style="background-color: #007bff; color: white; padding: 15px 30px; 
-                      text-decoration: none; border-radius: 5px; display: inline-block;
-                      font-weight: bold;">
-              Verify My Account
-            </a>
-          </div>
-          
-          <p style="color: #666; font-size: 14px; border-top: 1px solid #eee; padding-top: 20px;">
-            <strong>If the button doesn't work, copy and paste this link into your browser:</strong><br>
-            <a href="${verificationUrl}" style="color: #007bff; word-break: break-all;">${verificationUrl}</a>
-          </p>
-          
-          <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin-top: 20px;">
-            <p style="color: #666; font-size: 12px; margin: 0;">
-              <strong>Security Note:</strong> If you didn't create this account, please ignore this email. 
-              This verification link will expire in 24 hours for your security.
-            </p>
-          </div>
-          
-          <p style="color: #999; font-size: 11px; text-align: center; margin-top: 30px;">
-            This email was sent by JUCE App. Please do not reply to this email.
-          </p>
-        </div>
-      `,
-      text: `Welcome to JUCE App, ${username}! Please verify your account by visiting: ${verificationUrl}`
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    console.log('✅ Verification email sent successfully:', info.messageId);
-    console.log('📬 Brevo response:', info.response);
-    return { success: true, messageId: info.messageId };
-    
-  } catch (error) {
-    console.error('❌ Failed to send verification email:', error);
-    console.error('Error details:', {
-      code: error.code,
-      command: error.command,
-      response: error.response,
-      responseCode: error.responseCode
-    });
-    return { success: false, error: error.message };
-  }
-};
-
-// Test email endpoint (for debugging)
-app.post('/api/test-email', async (req, res) => {
-  try {
-    const { email } = req.body;
-    
-    if (!email) {
-      return res.status(400).json({ success: false, message: 'Email is required' });
-    }
-
-    console.log(`🧪 Testing email sending to: ${email}`);
-    
-    const testResult = await sendVerificationEmail(email, 'test-token-123', 'TestUser');
-    
-    if (testResult.success) {
-      res.json({ 
-        success: true, 
-        message: 'Test email sent successfully',
-        messageId: testResult.messageId
-      });
-    } else {
-      res.status(500).json({ 
-        success: false, 
-        message: 'Failed to send test email',
-        error: testResult.error
-      });
-    }
-  } catch (error) {
-    console.error('Test email error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
+// Email setup
+const transporter = nodemailer.createTransport({
+  host: process.env.EMAIL_HOST || 'smtp-relay.brevo.com',
+  port: process.env.EMAIL_PORT || 587,
+  secure: false,
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
   }
 });
 
-// Enhanced User Registration with better email handling
+// Helper functions
+const generateToken = (userId) => {
+  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '7d' });
+};
+
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ success: false, message: 'Access token required' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ success: false, message: 'Invalid token' });
+    }
+    req.user = user;
+    next();
+  });
+};
+
+// Routes
+
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'JUCE Backend API is running!', 
+    status: 'success',
+    version: '1.0.0',
+    endpoints: {
+      health: 'GET /api/health',
+      register: 'POST /api/auth/register',
+      login: 'POST /api/auth/login',
+      forgotPassword: 'POST /api/auth/forgot-password',
+      resetPassword: 'POST /api/auth/reset-password',
+      verifyEmail: 'GET /api/auth/verify/:token',
+      profile: 'GET /api/user/profile',
+      updateProfile: 'PUT /api/user/profile',
+      logout: 'POST /api/auth/logout'
+    }
+  });
+});
+
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({ success: true, message: 'Server is running', timestamp: new Date().toISOString() });
+});
+
+// Keep-alive for free hosting
+app.get('/api/ping', (req, res) => {
+  res.json({ message: 'pong', timestamp: new Date().toISOString() });
+});
+
+// App version check (for auto-updates)
+app.get('/api/app/version', (req, res) => {
+  res.json({ 
+    version: '1.0.0',
+    download_url: 'https://github.com/yourusername/juce-app/releases',
+    required_update: false
+  });
+});
+
+// User Registration
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { username, email, password } = req.body;
 
-    // Validation (keeping your existing validation)
+    // Validation
     if (!username || !email || !password) {
       return res.status(400).json({ 
         success: false, 
@@ -286,41 +228,49 @@ app.post('/api/auth/register', async (req, res) => {
     });
 
     await newUser.save();
-    console.log(`✅ User created successfully: ${username} (${email})`);
 
-    // Send verification email
+    // Send verification email (optional)
     if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-      console.log('📧 Email credentials found, attempting to send verification email...');
-      
-      const emailResult = await sendVerificationEmail(email, verificationToken, username);
-      
-      if (emailResult.success) {
-        console.log('✅ Verification email sent successfully');
-        res.status(201).json({ 
-          success: true, 
-          message: 'Account created successfully! Please check your email for verification.',
-          emailSent: true
+      try {
+        const verificationUrl = `${process.env.BASE_URL}/api/auth/verify/${verificationToken}`;
+        
+        await transporter.sendMail({
+          from: process.env.EMAIL_USER,
+          to: email,
+          subject: 'Verify your JUCE App account',
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #333;">Welcome to JUCE App!</h2>
+              <p>Thank you for registering. Please click the button below to verify your account:</p>
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="${verificationUrl}" 
+                   style="background-color: #007bff; color: white; padding: 12px 24px; 
+                          text-decoration: none; border-radius: 5px; display: inline-block;">
+                  Verify Account
+                </a>
+              </div>
+              <p style="color: #666; font-size: 14px;">
+                If the button doesn't work, copy and paste this link into your browser:<br>
+                <a href="${verificationUrl}">${verificationUrl}</a>
+              </p>
+              <p style="color: #666; font-size: 12px;">
+                If you didn't create this account, please ignore this email.
+              </p>
+            </div>
+          `
         });
-      } else {
-        console.log('⚠️  User created but email failed to send');
-        res.status(201).json({ 
-          success: true, 
-          message: 'Account created successfully, but we couldn\'t send the verification email. Please contact support.',
-          emailSent: false,
-          emailError: emailResult.error
-        });
+      } catch (emailError) {
+        console.error('Failed to send verification email:', emailError);
       }
-    } else {
-      console.log('⚠️  Email credentials not configured');
-      res.status(201).json({ 
-        success: true, 
-        message: 'Account created successfully. Email verification is currently unavailable.',
-        emailSent: false
-      });
     }
 
+    res.status(201).json({ 
+      success: true, 
+      message: 'Account created successfully. Please check your email for verification.' 
+    });
+
   } catch (error) {
-    console.error('❌ Registration error:', error);
+    console.error('Registration error:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Internal server error' 
@@ -328,28 +278,343 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-// Health check with email status
-app.get('/api/health', (req, res) => {
+// User Login
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Username and password are required' 
+      });
+    }
+
+    // Find user by username or email
+    const user = await User.findOne({ 
+      $or: [{ username }, { email: username }] 
+    });
+
+    if (!user) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid credentials' 
+      });
+    }
+
+    // Check password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    
+    if (!isPasswordValid) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid credentials' 
+      });
+    }
+
+    // Update last login
+    user.lastLogin = new Date();
+    await user.save();
+
+    // Generate JWT token
+    const token = generateToken(user._id);
+
+    res.json({ 
+      success: true, 
+      message: 'Login successful',
+      token,
+      username: user.username,
+      userId: user._id
+    });
+
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error' 
+    });
+  }
+});
+
+// Forgot Password
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Email is required' 
+      });
+    }
+
+    const user = await User.findOne({ email });
+    
+    if (!user) {
+      // Don't reveal whether user exists for security
+      return res.json({ 
+        success: true, 
+        message: 'If an account with that email exists, a reset link has been sent.' 
+      });
+    }
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
+    await user.save();
+
+    // Send reset email
+    if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+      try {
+        const resetUrl = `${process.env.BASE_URL}/reset-password.html?token=${resetToken}`;
+        
+        await transporter.sendMail({
+          from: process.env.EMAIL_USER,
+          to: email,
+          subject: 'JUCE App Password Reset',
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #333;">Password Reset Request</h2>
+              <p>You requested a password reset for your JUCE App account.</p>
+              <p>Click the button below to reset your password:</p>
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="${resetUrl}" 
+                   style="background-color: #dc3545; color: white; padding: 12px 24px; 
+                          text-decoration: none; border-radius: 5px; display: inline-block;">
+                  Reset Password
+                </a>
+              </div>
+              <p style="color: #666; font-size: 14px;">
+                This link will expire in 1 hour for security reasons.
+              </p>
+              <p style="color: #666; font-size: 12px;">
+                If you didn't request this, please ignore this email. Your password won't be changed.
+              </p>
+            </div>
+          `
+        });
+      } catch (emailError) {
+        console.error('Failed to send reset email:', emailError);
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'If an account with that email exists, a reset link has been sent.' 
+    });
+
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error' 
+    });
+  }
+});
+
+// Reset Password
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Token and new password are required' 
+      });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Password must be at least 8 characters long' 
+      });
+    }
+
+    const user = await User.findOne({
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid or expired reset token' 
+      });
+    }
+
+    // Hash new password
+    const saltRounds = 12;
+    const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+
+    // Update user
+    user.password = hashedPassword;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+
+    res.json({ 
+      success: true, 
+      message: 'Password reset successful' 
+    });
+
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error' 
+    });
+  }
+});
+
+// Get User Profile (Protected Route)
+app.get('/api/user/profile', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId).select('-password -resetPasswordToken');
+    
+    if (!user) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'User not found' 
+      });
+    }
+
+    res.json({ 
+      success: true, 
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        profileData: user.profileData,
+        isVerified: user.isVerified,
+        lastLogin: user.lastLogin,
+        createdAt: user.createdAt
+      }
+    });
+
+  } catch (error) {
+    console.error('Get profile error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error' 
+    });
+  }
+});
+
+// Update User Profile (Protected Route)
+app.put('/api/user/profile', authenticateToken, async (req, res) => {
+  try {
+    const { firstName, lastName, preferences } = req.body;
+    
+    const user = await User.findById(req.user.userId);
+    
+    if (!user) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'User not found' 
+      });
+    }
+
+    // Update profile data
+    if (firstName !== undefined) user.profileData.firstName = firstName;
+    if (lastName !== undefined) user.profileData.lastName = lastName;
+    if (preferences) {
+      user.profileData.preferences = { ...user.profileData.preferences, ...preferences };
+    }
+
+    await user.save();
+
+    res.json({ 
+      success: true, 
+      message: 'Profile updated successfully',
+      profileData: user.profileData
+    });
+
+  } catch (error) {
+    console.error('Update profile error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error' 
+    });
+  }
+});
+
+// Email Verification
+app.get('/api/auth/verify/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    const user = await User.findOne({ verificationToken: token });
+    
+    if (!user) {
+      return res.status(400).send(`
+        <html>
+          <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+            <h2 style="color: red;">Invalid Verification Token</h2>
+            <p>The verification link is invalid or has already been used.</p>
+            <p><a href="${process.env.BASE_URL}">Return to App</a></p>
+          </body>
+        </html>
+      `);
+    }
+
+    user.isVerified = true;
+    user.verificationToken = undefined;
+    await user.save();
+
+    res.send(`
+      <html>
+        <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+          <h2 style="color: green;">Email Verified Successfully!</h2>
+          <p>Your account has been verified. You can now close this window and log in to the application.</p>
+          <p><a href="${process.env.BASE_URL}">Return to App</a></p>
+        </body>
+      </html>
+    `);
+
+  } catch (error) {
+    console.error('Email verification error:', error);
+    res.status(500).send(`
+      <html>
+        <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+          <h2 style="color: red;">Verification Failed</h2>
+          <p>An error occurred during verification. Please try again.</p>
+        </body>
+      </html>
+    `);
+  }
+});
+
+// Logout (Protected Route)
+app.post('/api/auth/logout', authenticateToken, (req, res) => {
   res.json({ 
     success: true, 
-    message: 'Server is running', 
-    timestamp: new Date().toISOString(),
-    email: {
-      configured: !!(process.env.EMAIL_USER && process.env.EMAIL_PASS),
-      host: emailConfig.host,
-      port: emailConfig.port
-    }
+    message: 'Logged out successfully' 
   });
 });
 
-// Keep your existing routes (login, forgot password, etc.)
-// ... (include all your other existing routes here)
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Error:', err);
+  res.status(500).json({ 
+    success: false, 
+    message: 'Internal server error' 
+  });
+});
+
+// 404 handler
+app.use('*', (req, res) => {
+  res.status(404).json({ 
+    success: false, 
+    message: 'Endpoint not found' 
+  });
+});
 
 // Start server
 const server = app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`🏥 Health check: http://localhost:${PORT}/api/health`);
-  console.log(`🧪 Test email: POST http://localhost:${PORT}/api/test-email`);
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Health check: http://localhost:${PORT}/api/health`);
 });
 
 module.exports = app;
