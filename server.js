@@ -12,6 +12,7 @@ const app = express();
 const PORT = process.env.PORT;
 const JWT_SECRET = process.env.JWT_SECRET;
 const MONGODB_URI = process.env.MONGODB_URI;
+console.log('MONGODB_URI being used:', MONGODB_URI.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@'));
 
 // Middleware
 app.use(cors({
