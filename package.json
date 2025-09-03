@@ -15,6 +15,7 @@
     "dotenv": "^16.3.1",
     "nodemailer": "^6.9.4",
     "form-data": "^4.0.0",
-    "mailgun.js": "^9.4.0"
+    "mailgun.js": "^9.4.0",
+    "@getbrevo/brevo": "^2.0.0"
   }
 }
