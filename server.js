@@ -133,6 +133,26 @@ const authenticateToken = (req, res, next) => {
 
 // Routes
 
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'JUCE Backend API is running!', 
+    status: 'success',
+    version: '1.0.0',
+    endpoints: {
+      health: 'GET /api/health',
+      register: 'POST /api/auth/register',
+      login: 'POST /api/auth/login',
+      forgotPassword: 'POST /api/auth/forgot-password',
+      resetPassword: 'POST /api/auth/reset-password',
+      verifyEmail: 'GET /api/auth/verify/:token',
+      profile: 'GET /api/user/profile',
+      updateProfile: 'PUT /api/user/profile',
+      logout: 'POST /api/auth/logout'
+    }
+  });
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'Server is running', timestamp: new Date().toISOString() });
