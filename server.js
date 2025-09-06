@@ -589,7 +589,7 @@ app.get("/api/auth/reset-password/:token", async (req, res) => {
     }
 
     // Redirect to frontend page (React/Next.js form, etc.)
-    res.redirect(`${FRONTEND_URL}/reset-password/${token}`);
+    res.redirect(`${BASE_URL}/api/auth/reset-password/${token}`);
 });
 
 // Password reset
