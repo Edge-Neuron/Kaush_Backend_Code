@@ -259,7 +259,7 @@ const emailTemplates = {
                 <h2>Hi ${name}!</h2>
                 <p>We received a request to reset your password. Click the button below to reset it:</p>
                 <div style="text-align: center; margin: 30px 0;">
-                    <a href="${BASE_URL}/api/auth/reset/${token}" 
+                    <a href="${BASE_URL}/api/auth/reset-password/${token}" 
                        style="background: #dc3545; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">
                         Reset Password
                     </a>
