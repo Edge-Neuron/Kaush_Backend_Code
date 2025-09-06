@@ -571,6 +571,27 @@ app.post("/api/auth/forgot-password", async (req, res) => {
     }
 });
 
+//when user clicks on reset link
+app.get("/api/auth/reset-password/:token", async (req, res) => {
+    const { token } = req.params;
+
+    // You might just verify if the token is valid here
+    const user = await User.findOne({
+        'authentication.passwordResetToken': token,
+        'authentication.passwordResetExpires': { $gt: new Date() }
+    });
+
+    if (!user) {
+        return res.status(400).json({ 
+            success: false, 
+            message: "Invalid or expired reset token" 
+        });
+    }
+
+    // Redirect to frontend page (React/Next.js form, etc.)
+    res.redirect(`${FRONTEND_URL}/reset-password/${token}`);
+});
+
 // Password reset
 app.post("/api/auth/reset-password/:token", async (req, res) => {
     try {
