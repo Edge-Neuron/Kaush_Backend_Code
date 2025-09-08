@@ -672,7 +672,7 @@ app.get("/api/auth/reset-password/:token", async (req, res) => {
 
         console.log(`✅ [RESET GET] Valid token, redirecting to frontend`);
         // Fixed redirect - should go to your frontend, not backend
-        res.redirect(`${FRONTEND_URL}/reset-password/${req.params.token}`);
+        res.redirect(`${BASE_URL}/api/auth/reset-password/${req.params.token}`);
 
     } catch (err) {
         console.error("❌ [RESET GET] Verification error:", err);
