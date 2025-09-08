@@ -647,25 +647,39 @@ app.post("/api/auth/forgot-password", async (req, res) => {
 });
 
 //when user clicks on reset link
+// Enhanced password reset GET route with debugging
 app.get("/api/auth/reset-password/:token", async (req, res) => {
-    const { token } = req.params;
-
-    // You might just verify if the token is valid here
-    const user = await User.findOne({
-        'authentication.passwordResetToken': token,
-        'authentication.passwordResetExpires': { $gt: new Date() }
-    });
-
-    if (!user) {
-        return res.status(400).json({ 
-            success: false, 
-            message: "Invalid or expired reset token" 
+    console.log(`🔍 [RESET GET] Token: ${req.params.token}`);
+    console.log(`🔍 [RESET GET] IP: ${req.ip}`);
+    console.log(`🔍 [RESET GET] Headers:`, req.headers);
+    
+    try {
+        const user = await User.findOne({ 
+            'authentication.passwordResetToken': req.params.token,
+            'authentication.passwordResetExpires': { $gt: new Date() }
         });
-    }
+        
+        if (!user) {
+            console.log(`❌ [RESET GET] Invalid/expired token: ${req.params.token}`);
+            return res.status(400).send(`
+                <div style="text-align: center; font-family: Arial, sans-serif; padding: 50px;">
+                    <h2 style="color: #dc3545;">❌ Invalid or Expired Token</h2>
+                    <p>This verification link is either invalid or has expired.</p>
+                    <p>Please request a new verification email.</p>
+                </div>
+            `);
+        }
 
-    // Redirect to frontend page (React/Next.js form, etc.)
-    res.redirect(`${BASE_URL}/api/auth/reset-password/${token}`);
+        console.log(`✅ [RESET GET] Valid token, redirecting to frontend`);
+        // Fixed redirect - should go to your frontend, not backend
+        res.redirect(`${FRONTEND_URL}/reset-password/${req.params.token}`);
+
+    } catch (err) {
+        console.error("❌ [RESET GET] Verification error:", err);
+        res.status(500).send("<h2>Server error during verification</h2>");
+    }
 });
+
 
 // Password reset
 app.post("/api/auth/reset-password/:token", async (req, res) => {
