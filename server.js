@@ -648,10 +648,10 @@ app.post("/api/auth/forgot-password", async (req, res) => {
 
 //when user clicks on reset link
 // Enhanced password reset GET route with debugging
+// Replace your password reset GET route with this:
 app.get("/api/auth/reset-password/:token", async (req, res) => {
     console.log(`🔍 [RESET GET] Token: ${req.params.token}`);
     console.log(`🔍 [RESET GET] IP: ${req.ip}`);
-    console.log(`🔍 [RESET GET] Headers:`, req.headers);
     
     try {
         const user = await User.findOne({ 
@@ -662,24 +662,233 @@ app.get("/api/auth/reset-password/:token", async (req, res) => {
         if (!user) {
             console.log(`❌ [RESET GET] Invalid/expired token: ${req.params.token}`);
             return res.status(400).send(`
-                <div style="text-align: center; font-family: Arial, sans-serif; padding: 50px;">
-                    <h2 style="color: #dc3545;">❌ Invalid or Expired Token</h2>
-                    <p>This verification link is either invalid or has expired.</p>
-                    <p>Please request a new verification email.</p>
+                <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 50px auto; padding: 20px;">
+                    <div style="background: #dc3545; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+                        <h2 style="margin: 0;">❌ Invalid or Expired Link</h2>
+                    </div>
+                    <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 8px 8px;">
+                        <p>This password reset link is either invalid or has expired.</p>
+                        <p>Please <a href="${FRONTEND_URL}/forgot-password" style="color: #007bff;">request a new password reset</a>.</p>
+                    </div>
                 </div>
             `);
         }
 
-        console.log(`✅ [RESET GET] Valid token, redirecting to frontend`);
-        // Fixed redirect - should go to your frontend, not backend
-        res.redirect(`${BASE_URL}/api/auth/reset-password/${req.params.token}`);
+        console.log(`✅ [RESET GET] Valid token, showing form for user: ${user.email}`);
+        
+        // Return HTML form for password reset
+        res.send(`
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Reset Your Password - JUCE App</title>
+                <style>
+                    body {
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        min-height: 100vh;
+                        margin: 0;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    }
+                    .container {
+                        background: white;
+                        padding: 40px;
+                        border-radius: 12px;
+                        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+                        width: 100%;
+                        max-width: 400px;
+                    }
+                    .header {
+                        text-align: center;
+                        margin-bottom: 30px;
+                    }
+                    .header h1 {
+                        color: #333;
+                        margin: 0 0 10px 0;
+                        font-size: 24px;
+                    }
+                    .header p {
+                        color: #666;
+                        margin: 0;
+                    }
+                    .form-group {
+                        margin-bottom: 20px;
+                    }
+                    label {
+                        display: block;
+                        margin-bottom: 8px;
+                        color: #333;
+                        font-weight: 500;
+                    }
+                    input[type="password"] {
+                        width: 100%;
+                        padding: 12px;
+                        border: 2px solid #e1e5e9;
+                        border-radius: 8px;
+                        font-size: 16px;
+                        box-sizing: border-box;
+                        transition: border-color 0.3s;
+                    }
+                    input[type="password"]:focus {
+                        outline: none;
+                        border-color: #667eea;
+                    }
+                    .btn {
+                        width: 100%;
+                        padding: 12px;
+                        background: #667eea;
+                        color: white;
+                        border: none;
+                        border-radius: 8px;
+                        font-size: 16px;
+                        font-weight: 500;
+                        cursor: pointer;
+                        transition: background 0.3s;
+                    }
+                    .btn:hover {
+                        background: #5a6fd8;
+                    }
+                    .btn:disabled {
+                        background: #ccc;
+                        cursor: not-allowed;
+                    }
+                    .error {
+                        color: #dc3545;
+                        margin-top: 10px;
+                        display: none;
+                    }
+                    .success {
+                        color: #28a745;
+                        margin-top: 10px;
+                        display: none;
+                    }
+                    .password-requirements {
+                        font-size: 12px;
+                        color: #666;
+                        margin-top: 5px;
+                    }
+                    .loading {
+                        display: none;
+                        text-align: center;
+                        margin-top: 10px;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>🔒 Reset Your Password</h1>
+                        <p>Enter your new password below</p>
+                    </div>
+                    
+                    <form id="resetForm">
+                        <div class="form-group">
+                            <label for="password">New Password</label>
+                            <input type="password" id="password" name="password" required minlength="8">
+                            <div class="password-requirements">
+                                Must be at least 8 characters long
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="confirmPassword">Confirm New Password</label>
+                            <input type="password" id="confirmPassword" name="confirmPassword" required minlength="8">
+                        </div>
+                        
+                        <button type="submit" class="btn" id="submitBtn">Reset Password</button>
+                        
+                        <div class="loading" id="loading">
+                            Resetting your password...
+                        </div>
+                        
+                        <div class="error" id="error"></div>
+                        <div class="success" id="success"></div>
+                    </form>
+                </div>
+
+                <script>
+                    document.getElementById('resetForm').addEventListener('submit', async function(e) {
+                        e.preventDefault();
+                        
+                        const password = document.getElementById('password').value;
+                        const confirmPassword = document.getElementById('confirmPassword').value;
+                        const errorDiv = document.getElementById('error');
+                        const successDiv = document.getElementById('success');
+                        const submitBtn = document.getElementById('submitBtn');
+                        const loading = document.getElementById('loading');
+                        
+                        // Clear previous messages
+                        errorDiv.style.display = 'none';
+                        successDiv.style.display = 'none';
+                        
+                        // Validation
+                        if (password !== confirmPassword) {
+                            errorDiv.textContent = 'Passwords do not match';
+                            errorDiv.style.display = 'block';
+                            return;
+                        }
+                        
+                        if (password.length < 8) {
+                            errorDiv.textContent = 'Password must be at least 8 characters long';
+                            errorDiv.style.display = 'block';
+                            return;
+                        }
+                        
+                        // Submit
+                        submitBtn.disabled = true;
+                        loading.style.display = 'block';
+                        
+                        try {
+                            const response = await fetch(window.location.href, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({ password })
+                            });
+                            
+                            const result = await response.json();
+                            
+                            if (result.success) {
+                                successDiv.textContent = result.message;
+                                successDiv.style.display = 'block';
+                                document.getElementById('resetForm').reset();
+                                
+                                // Redirect after 3 seconds
+                                setTimeout(() => {
+                                    window.location.href = '${FRONTEND_URL || BASE_URL}';
+                                }, 3000);
+                            } else {
+                                errorDiv.textContent = result.message || 'An error occurred';
+                                errorDiv.style.display = 'block';
+                            }
+                        } catch (error) {
+                            errorDiv.textContent = 'Network error. Please try again.';
+                            errorDiv.style.display = 'block';
+                        } finally {
+                            submitBtn.disabled = false;
+                            loading.style.display = 'none';
+                        }
+                    });
+                </script>
+            </body>
+            </html>
+        `);
 
     } catch (err) {
         console.error("❌ [RESET GET] Verification error:", err);
-        res.status(500).send("<h2>Server error during verification</h2>");
+        res.status(500).send(`
+            <div style="text-align: center; font-family: Arial, sans-serif; padding: 50px;">
+                <h2 style="color: #dc3545;">Server Error</h2>
+                <p>Something went wrong. Please try again later.</p>
+            </div>
+        `);
     }
 });
-
 
 // Password reset
 app.post("/api/auth/reset-password/:token", async (req, res) => {
