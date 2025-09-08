@@ -99,7 +99,7 @@ const createRateLimit = (maxRequests, windowMs, name = 'unknown') => {
     };
 };
 
-const authLimiter = createRateLimit(5, 15 * 60 * 1000,"auth"); // 5 attempts per 15 minutes
+const authLimiter = createRateLimit(50, 15 * 60 * 1000,"auth"); // 5 attempts per 15 minutes
 const generalLimiter = createRateLimit(100, 15 * 60 * 1000,"general"); // 100 requests per 15 minutes
 
 // Apply rate limiting - but let's be more selective
