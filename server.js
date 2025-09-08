@@ -30,41 +30,116 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+app.set('trust proxy', true)
+
 // Rate limiting implementation (simple in-memory version)
 const rateLimitStore = new Map();
 
-const createRateLimit = (maxRequests, windowMs) => {
+const createRateLimit = (maxRequests, windowMs, name = 'unknown') => {
     return (req, res, next) => {
-        const key = req.ip;
+        // Better IP detection with fallbacks
+        const getClientIP = (req) => {
+            return req.ip || 
+                   req.connection?.remoteAddress || 
+                   req.socket?.remoteAddress || 
+                   (req.connection?.socket ? req.connection.socket.remoteAddress : null) ||
+                   req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                   req.headers['x-real-ip'] ||
+                   'unknown';
+        };
+
+        const clientIP = getClientIP(req);
+        const key = `${name}-${clientIP}`;
         const now = Date.now();
+        
+        // DEBUG LOGGING - Remove these console.logs after debugging
+        console.log(`🔍 [RATE LIMIT DEBUG] ${name}:`);
+        console.log(`   - IP: ${clientIP}`);
+        console.log(`   - Key: ${key}`);
+        console.log(`   - URL: ${req.method} ${req.originalUrl}`);
+        console.log(`   - Headers:`, {
+            'x-forwarded-for': req.headers['x-forwarded-for'],
+            'x-real-ip': req.headers['x-real-ip'],
+            'user-agent': req.headers['user-agent']
+        });
         
         if (!rateLimitStore.has(key)) {
             rateLimitStore.set(key, { count: 1, resetTime: now + windowMs });
+            console.log(`   - New entry created, count: 1`);
             return next();
         }
         
         const record = rateLimitStore.get(key);
+        console.log(`   - Existing record:`, record);
+        console.log(`   - Time remaining: ${Math.max(0, record.resetTime - now)}ms`);
         
         if (now > record.resetTime) {
             record.count = 1;
             record.resetTime = now + windowMs;
+            console.log(`   - Window expired, reset count to 1`);
             return next();
         }
         
         if (record.count >= maxRequests) {
-            return res.status(429).json({ error: 'Too many requests, please try again later' });
+            console.log(`   - ❌ RATE LIMIT EXCEEDED: ${record.count}/${maxRequests}`);
+            return res.status(429).json({ 
+                error: 'Too many requests, please try again later',
+                details: {
+                    limit: maxRequests,
+                    current: record.count,
+                    resetTime: new Date(record.resetTime).toISOString(),
+                    ip: clientIP
+                }
+            });
         }
         
         record.count++;
+        console.log(`   - ✅ Request allowed, new count: ${record.count}/${maxRequests}`);
         next();
     };
 };
 
-const authLimiter = createRateLimit(5, 15 * 60 * 1000); // 5 attempts per 15 minutes
-const generalLimiter = createRateLimit(100, 15 * 60 * 1000); // 100 requests per 15 minutes
+const authLimiter = createRateLimit(5, 15 * 60 * 1000."auth"); // 5 attempts per 15 minutes
+const generalLimiter = createRateLimit(100, 15 * 60 * 1000,"general"); // 100 requests per 15 minutes
 
-app.use('/api/auth', authLimiter);
-app.use('/api', generalLimiter);
+// Apply rate limiting - but let's be more selective
+// Only apply to the problematic routes for now
+app.use('/api/auth/register', authLimiter);
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/forgot-password', authLimiter);
+
+// Apply general rate limiting to other API routes
+app.use('/api/user', generalLimiter);
+app.use('/api/audio', generalLimiter);
+app.use('/api/feedback', generalLimiter);
+app.use('/api/analytics', generalLimiter);
+
+// Add a debug endpoint to check rate limit status
+app.get('/api/debug/rate-limit', (req, res) => {
+    const getClientIP = (req) => {
+        return req.ip || 
+               req.connection?.remoteAddress || 
+               req.socket?.remoteAddress || 
+               (req.connection?.socket ? req.connection.socket.remoteAddress : null) ||
+               req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+               req.headers['x-real-ip'] ||
+               'unknown';
+    };
+
+    const clientIP = getClientIP(req);
+    const authKey = `auth-${clientIP}`;
+    const generalKey = `general-${clientIP}`;
+    
+    res.json({
+        ip: clientIP,
+        rateLimits: {
+            auth: rateLimitStore.get(authKey) || 'No record',
+            general: rateLimitStore.get(generalKey) || 'No record'
+        },
+        headers: req.headers,
+        allKeys: Array.from(rateLimitStore.keys())
+    });
+});
 
 // Connect to MongoDB
 mongoose
